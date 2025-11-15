@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>PongoBot Jungle Fruit Catcher</title>
+<title>PongoBot Jungle Fruit Catcher — Mobile Friendly</title>
 <style>
 :root{--btn:#f08a24;--muted:#999;}
 body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:#558B2F;display:flex;justify-content:center;padding:12px;}
-.game-wrap{max-width:920px;width:100%;background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.12);overflow:hidden;}
-header{display:flex;justify-content:space-between;padding:12px;background:#f0f0f0;align-items:center;}
-.hud{display:flex;gap:12px;align-items:center;font-weight:700;color:#333;}
+.game-wrap{width:100%;max-width:480px;background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.12);overflow:hidden;}
+header{display:flex;justify-content:space-between;padding:12px;background:#f0f0f0;align-items:center;flex-wrap:wrap;}
+.hud{display:flex;gap:8px;align-items:center;font-weight:700;color:#333;flex-wrap:wrap;}
 .canvas-wrap{position:relative;background:#000;border-radius:6px;overflow:hidden;}
-canvas{display:block;width:100%;height:442px;}
-.bottom{display:flex;justify-content:center;gap:12px;padding:12px;background:#fff;}
-.btn{flex:1;padding:12px;border:none;border-radius:10px;font-size:18px;background:var(--btn);color:#fff;cursor:pointer;transition:0.18s;}
+canvas{display:block;width:100%;height:auto;}
+.bottom{display:flex;justify-content:center;gap:8px;padding:12px;flex-wrap:wrap;}
+.btn{flex:1 1 45%;padding:12px;border:none;border-radius:10px;font-size:16px;background:var(--btn);color:#fff;cursor:pointer;transition:0.18s;}
 .btn.muted{background:var(--muted);}
 #endBtn{background:#d32f2f;}
 #endBtn:hover{background:#f44336;}
 .message{padding:10px 16px;background:#f0f0f0;font-size:15px;color:#333;text-align:center;}
-.voice-bubble{position:absolute;pointer-events:none;background:rgba(255,255,255,0.96);border-radius:12px;padding:8px 12px;font-weight:700;color:#222;box-shadow:0 8px 24px rgba(0,0,0,0.18);white-space:nowrap;opacity:0;transition:opacity 180ms ease, transform 180ms ease;z-index:1000;}
+.voice-bubble{position:absolute;pointer-events:none;background:rgba(255,255,255,0.96);border-radius:12px;padding:6px 10px;font-weight:700;color:#222;box-shadow:0 8px 24px rgba(0,0,0,0.18);white-space:nowrap;opacity:0;transition:opacity 180ms ease, transform 180ms ease;z-index:1000;}
 .badge{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd54f,#ff8a65);padding:6px 14px;border-radius:999px;font-weight:800;color:#4a2b00;box-shadow:0 6px 20px rgba(0,0,0,0.12);display:none;z-index:20}
 .badge.active{display:block;}
 .tint-overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:overlay;opacity:0.35;z-index:5}
-.header-right{display:flex;gap:8px;align-items:center}
+.header-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .score-small{font-size:14px;color:#333}
 </style>
 </head>
@@ -61,9 +61,12 @@ canvas{display:block;width:100%;height:442px;}
 
 <script>
 (() => {
-  const NUM_PATHS = 6, PLAYER_SIZE = 264, FRUIT_SIZE = 192, CANVAS_HEIGHT = 442;
+  const NUM_PATHS = 6, CANVAS_BASE_HEIGHT = 520;
   const MOVE_SPEED = 0.22, COMBO_THRESHOLD = 5, FEVER_THRESHOLD = 10;
   const COMBO_DURATION = 5000, FEVER_DURATION = 10000, DAYNIGHT_CYCLE_MS = 60000;
+  const BASE_WIDTH = 920; // original design
+
+  let PLAYER_SIZE = 264, FRUIT_SIZE = 192;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -101,11 +104,16 @@ canvas{display:block;width:100%;height:442px;}
   let DPR = window.devicePixelRatio || 1;
   let pathX=[], W=0, H=0;
   function computePaths(){ W=canvas.width; H=canvas.height; pathX=[]; for(let i=0;i<NUM_PATHS;i++){ pathX.push(Math.round(W*(i+0.5)/NUM_PATHS)); } }
+
   function resizeCanvas(){
     DPR = window.devicePixelRatio || 1;
-    canvas.style.height = CANVAS_HEIGHT+'px';
-    canvas.width = Math.round(canvas.clientWidth*DPR);
-    canvas.height = Math.round(canvas.clientHeight*DPR);
+    canvas.width = canvas.clientWidth*DPR;
+    canvas.height = canvas.width*(CANVAS_BASE_HEIGHT/BASE_WIDTH)*DPR;
+
+    const scale = canvas.width / BASE_WIDTH;
+    PLAYER_SIZE = 264 * scale;
+    FRUIT_SIZE = 192 * scale;
+
     computePaths();
     player.y = canvas.height - Math.round(PLAYER_SIZE/2) - Math.round(12*DPR);
     player.x = pathX[player.path]; player.displayX = player.x;
@@ -160,7 +168,6 @@ canvas{display:block;width:100%;height:442px;}
   function draw(){ ctx.clearRect(0,0,W,H); drawBackground(); drawFruits(); drawPlayer(); }
 
   function pickRandomFruit(){ let total = FRUITS_DEF.reduce((s,f)=>s+f.weight,0); let r=Math.random()*total; let s=0; for(let f of FRUITS_DEF){s+=f.weight; if(r<=s) return {...f};} return {...FRUITS_DEF[0]}; }
-
   function spawnFruit(){ const f=pickRandomFruit(); const path=Math.floor(Math.random()*NUM_PATHS); fruits.push({...f,x:pathX[path],y:-FRUIT_SIZE-10,path,speed:2+Math.random()*1.8}); }
 
   function gainPoints(pts){ const now=performance.now(); if(feverActiveUntil>now) pts*=2; else if(comboActiveUntil>now) pts=Math.round(pts*1.5); score+=pts; }
@@ -240,3 +247,5 @@ canvas{display:block;width:100%;height:442px;}
 </script>
 </body>
 </html>
+
+
