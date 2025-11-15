@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PongoBot Fruit Catcher</title>
+<style>
+  :root{
+    --bg:#eaf7ef;
+    --panel:#ffffffcc;
+    --accent:#f08a24;
+    --muted:#5a5a5a;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;}
+  body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#c8f7e0,#e0fbff);padding:18px;}
+  .game-wrap{width:100%;max-width:720px;background:var(--panel);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.12);overflow:hidden;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,255,255,0.6);backdrop-filter:blur(4px);}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{font-size:28px} .title{font-weight:700}
+  .controls{display:flex;gap:10px;align-items:center}
+  .btn{background:var(--accent);color:white;padding:8px 12px;border-radius:10px;border:none;cursor:pointer;font-weight:600}
+  .btn.secondary{background:transparent;color:var(--muted);border:1px solid #eee}
+  .hud{display:flex;gap:12px;align-items:center;font-weight:700;color:var(--muted)}
+  canvas{display:block;width:100%;height:430px;background:linear-gradient(180deg,#a7e0b8,#7ad0a3);touch-action:none;}
+  .bottom{display:flex;gap:12px;align-items:center;padding:12px 16px;}
+  .scoreboard{display:flex;gap:8px;flex:1}
+  .scorebox{background:#fff;border-radius:10px;padding:8px 10px;box-shadow:0 4px 10px rgba(0,0,0,0.05);font-weight:700}
+  .touch-controls{display:flex;gap:8px}
+  .tc-btn{background:#fff;border-radius:10px;padding:12px 14px;box-shadow:0 6px 12px rgba(0,0,0,0.08);font-size:18px}
+  .message{padding:10px 16px;border-top:1px dashed rgba(0,0,0,0.06);background:rgba(255,255,255,0.5);font-size:15px;color:#333}
+  footer{padding:8px 12px;text-align:center;font-size:12px;color:var(--muted)}
+  @media (max-width:480px){
+    canvas{height:360px}
+    .btn{padding:6px 8px}
+  }
+</style>
+</head>
+<body>
+<div class="game-wrap" role="application" aria-label="PongoBot Fruit Catcher">
+  <header>
+    <div class="brand">
+      <div class="logo">🦧</div>
+      <div>
+        <div class="title">PongoBot Fruit Catcher</div>
+        <div style="font-size:12px;color:var(--muted)">Catch fruits — avoid durian! 🍌🌰</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="hud">
+        <div id="lives" class="hud-item">❤️❤️❤️</div>
+        <div id="score" class="hud-item">Score: 0</div>
+      </div>
+      <button id="startBtn" class="btn">Start</button>
+      <button id="muteBtn" class="btn secondary">🔊</button>
+    </div>
+  </header>
+
+  <canvas id="game" width="900" height="540" aria-label="Game canvas"></canvas>
+
+  <div class="bottom">
+    <div class="scoreboard">
+      <div class="scorebox" id="roundInfo">Round: 0</div>
+      <div class="scorebox" id="bestScore">Best: 0</div>
+    </div>
+    <div class="touch-controls" aria-hidden="false">
+      <button id="leftBtn" class="tc-btn">⬅️</button>
+      <button id="stayBtn" class="tc-btn">✋</button>
+      <button id="rightBtn" class="tc-btn">➡️</button>
+    </div>
+  </div>
+
+  <div class="message" id="message">Ooo ooo! Press Start to help PongoBot catch fruits! 🍌</div>
+  <footer>Tip: Use ← and → keys on desktop. On mobile, use the buttons. Embed-friendly single file.</footer>
+</div>
+
+<script>
+/* ========= PongoBot Fruit Catcher - Single File Game =========
+   Controls: Left / Right arrows or on-screen buttons.
+   Rules: Catch fruits for points. Durian costs a life. Starts with 3 lives.
+   Save: best score in localStorage.
+*/
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width, H = canvas.height;
+  const startBtn = document.getElementById('startBtn');
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  const stayBtn = document.getElementById('stayBtn');
+  const messageEl = document.getElementById('message');
+  const livesEl = document.getElementById('lives');
+  const scoreEl = document.getElementById('score');
+  const roundInfo = document.getElementById('roundInfo');
+  const bestScoreEl = document.getElementById('bestScore');
+  const muteBtn = document.getElementById('muteBtn');
+
+  // Game state
+  let playing = false;
+  let player = { x: W/2, y: H - 80, w: 88, h: 88, pos: 'center' }; // pos: 'left' 'center' 'right'
+  let fruits = []; // active falling items
+  let round = 0;
+  let score = 0;
+  let lives = 3;
+  let best = Number(localStorage.getItem('pongobot_best') || 0);
+  bestScoreEl.textContent = 'Best: ' + best;
+
+  let muted = false;
+  muteBtn.onclick = () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+  };
+
+  // Fruit types and weights (emoji visual)
+  const FRUITS = [
+    {emoji:'🍌', pts:3, weight:35},
+    {emoji:'🍉', pts:5, weight:18},
+    {emoji:'🥭', pts:4, weight:15},
+    {emoji:'🍎', pts:2, weight:20},
+    {emoji:'🌰', pts:0, weight:12, isDurian:true} // durian
+  ];
+  function pickRandomFruit(){
+    let total = FRUITS.reduce((s,f)=>s+f.weight,0);
+    let r = Math.random()*total;
+    let s = 0;
+    for(let f of FRUITS){
+      s += f.weight;
+      if(r <= s) return {...f};
+    }
+    return {...FRUITS[0]};
+  }
+
+  // Positions for left, center, right (x coordinate)
+  function computePositions(){
+    W = canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
+    H = canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
+    const gap = W/6;
+    return {
+      leftX: gap,
+      centerX: W/2,
+      rightX: W - gap
+    };
+  }
+  let posX = computePositions();
+
+  window.addEventListener('resize', ()=>{ posX = computePositions(); draw(); });
+
+  // draw background and player
+  function drawBackground(){
+    // sky gradient (canvas scaled already)
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#bff6cf');
+    g.addColorStop(1,'#7bd1a6');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+  }
+  function drawPlayer(){
+    const size = Math.min(120, player.w);
+    let x = player.x - size/2;
+    let y = player.y - size/2;
+    // draw simple orangutan using emoji text to keep it easy
+    ctx.font = (size) + "px serif";
+    ctx.textAlign = "center";
+    ctx.fillText('🦧', player.x, player.y + size/4);
+    // small shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath(); ctx.ellipse(player.x, player.y + size/1.6, size/2.2, size/6, 0, 0, Math.PI*2); ctx.fill();
+  }
+  function drawFruits(){
+    ctx.font = Math.min(72, W/12) + "px serif";
+    ctx.textAlign = "center";
+    for(let it of fruits){
+      ctx.fillText(it.emoji, it.x, it.y);
+    }
+  }
+
+  function drawUI(){
+    drawBackground();
+    // draw trees or branches subtle
+    for(let i=0;i<6;i++){
+      ctx.fillStyle = 'rgba(0,0,0,0.03)';
+      const tx = (i+1)*(W/7);
+      ctx.fillRect(tx, H/1.7, 8, H/1.7);
+      ctx.beginPath(); ctx.ellipse(tx, H/1.7 - 80, 120, 60, 0, 0, Math.PI*2); ctx.fill();
+    }
+    drawFruits();
+    drawPlayer();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    drawUI();
+  }
+
+  // spawn a fruit each round
+  function spawnFruit(){
+    const f = pickRandomFruit();
+    // choose column left/middle/right randomly
+    const columns = ['left','center','right'];
+    const col = columns[Math.floor(Math.random()*3)];
+    let x = posX.centerX;
+    if(col === 'left') x = posX.leftX;
+    if(col === 'right') x = posX.rightX;
+    const item = {
+      emoji: f.emoji,
+      pts: f.pts,
+      isDurian: !!f.isDurian,
+      x: x,
+      y: -50,
+      targetCol: col,
+      speed: 2 + Math.random()*1.6
+    };
+    fruits.push(item);
+  }
+
+  // move all fruits down and check collision with player column
+  function update(){
+    if(!playing) return;
+    round++;
+    roundInfo.textContent = 'Round: ' + round;
+    // every X frames spawn? We'll control spawn per tick call
+    if(frames % spawnInterval === 0){
+      spawnFruit();
+      // slightly increase difficulty over time
+      if(spawnInterval > 30 && round % 10 === 0) spawnInterval -= 2;
+    }
+
+    for(let i=fruits.length-1;i>=0;i--){
+      let it = fruits[i];
+      it.y += it.speed * (1 + Math.min(round/200, 0.8));
+      // when fruit reaches catch line (player.y)
+      if(it.y >= player.y - 10){
+        // check if player's pos matches fruit target column
+        if(player.pos === it.targetCol){
+          if(it.isDurian){
+            loseLife();
+            showMessage("OW! Durian stung PongoBot! 🌰💥");
+            playSound('durian');
+          } else {
+            score += it.pts;
+            showMessage(`YUM! You caught ${it.emoji} +${it.pts} points! 🍌`);
+            playSound('catch');
+          }
+        } else {
+          // missed
+          if(it.isDurian){
+            // durian landed safely on ground — no effect
+            showMessage("Phew! Durian missed me. Sniffle. 😅");
+          } else {
+            showMessage(`Oops! Missed the ${it.emoji}. Try again!`);
+            playSound('miss');
+          }
+        }
+        fruits.splice(i,1);
+      } else if(it.y > H + 80) {
+        fruits.splice(i,1);
+      }
+    }
+
+    scoreEl.textContent = 'Score: ' + score;
+    livesEl.textContent = '❤️'.repeat(lives) + (lives<=0 ? ' (Game Over)' : '');
+    draw();
+    if(lives <= 0) endGame();
+  }
+
+  function loseLife(){
+    lives = Math.max(0,lives-1);
+    if(lives > 0) playSound('ouch');
+  }
+
+  function endGame(){
+    playing = false;
+    showMessage(`Game Over! You scored ${score} points. PongoBot thanks you for the adventure! 🦧🍃`);
+    startBtn.textContent = 'Restart';
+    if(score > best){ best = score; localStorage.setItem('pongobot_best', best); bestScoreEl.textContent = 'Best: ' + best; showMessage('New best score! Wow! 🎉'); }
+  }
+
+  // controls: move player left/center/right
+  function setPlayerPosition(pos){
+    player.pos = pos;
+    if(pos === 'left') player.x = posX.leftX;
+    else if(pos === 'right') player.x = posX.rightX;
+    else player.x = posX.centerX;
+    // immediate draw
+    draw();
+  }
+
+  // keyboard handling
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'ArrowLeft'){ setPlayerPosition('left'); }
+    if(e.key === 'ArrowRight'){ setPlayerPosition('right'); }
+    if(e.key === ' '){ setPlayerPosition('center'); }
+  });
+
+  // touch buttons
+  leftBtn.addEventListener('click', ()=> setPlayerPosition('left'));
+  rightBtn.addEventListener('click', ()=> setPlayerPosition('right'));
+  stayBtn.addEventListener('click', ()=> setPlayerPosition('center'));
+
+  // start / restart
+  startBtn.addEventListener('click', ()=> {
+    if(playing) return;
+    startGame();
+  });
+
+  function showMessage(txt){
+    messageEl.textContent = txt;
+  }
+
+  // simple audio feedback using WebAudio (tone-ish)
+  const audioCtx = (window.AudioContext || window.webkitAudioContext) && new (window.AudioContext || window.webkitAudioContext)();
+  function playTone(freq, time=0.06, type='sine'){
+    if(!audioCtx || muted) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = 0.06;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + time);
+    o.stop(audioCtx.currentTime + time + 0.02);
+  }
+  function playSound(kind){
+    if(muted) return;
+    if(!audioCtx) return;
+    if(kind === 'catch') playTone(880,0.08,'triangle');
+    else if(kind === 'miss') playTone(300,0.09,'sine');
+    else if(kind === 'durian') { playTone(180,0.14,'sawtooth'); playTone(120,0.1,'sine'); }
+    else if(kind === 'ouch') playTone(220,0.12,'square');
+  }
+
+  // game loop
+  let frames = 0;
+  let spawnInterval = 60; // frames between spawns
+  function loop(){
+    if(playing){
+      frames++;
+      update();
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function startGame(){
+    playing = true;
+    fruits = [];
+    round = 0; score = 0; lives = 3; frames = 0; spawnInterval = 60;
+    setPlayerPosition('center');
+    startBtn.textContent = 'Playing...';
+    showMessage("Go! Help PongoBot catch fruits — avoid durians! 🍌🌰");
+    playSound('catch');
+    loop();
+  }
+
+  // initial draw and friendly tone
+  setPlayerPosition('center');
+  draw();
+  showMessage("Ooo ooo! Press Start to help PongoBot catch fruits! 🍌");
+
+  // accessibility: pause on blur
+  window.addEventListener('blur', ()=> { if(playing){ playing = false; startBtn.textContent = 'Resume'; showMessage('Paused — come back to swing with PongoBot!'); }});
+})();
+</script>
+</body>
+</html>
