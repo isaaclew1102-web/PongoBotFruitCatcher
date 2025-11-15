@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>PongoBot Jungle Fruit Catcher — Mobile Friendly</title>
+<title>PongoBot Jungle Fruit Catcher — Responsive Embed</title>
 <style>
 :root{--btn:#f08a24;--muted:#999;}
 body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:#558B2F;display:flex;justify-content:center;padding:12px;}
@@ -11,7 +11,8 @@ body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:#558B
 header{display:flex;flex-direction:column;padding:12px;background:#f0f0f0;align-items:center;}
 .hud{display:flex;gap:8px;align-items:center;font-weight:700;color:#333;flex-wrap:wrap;justify-content:center;margin-bottom:6px;}
 .canvas-wrap{position:relative;background:#000;border-radius:6px;overflow:hidden;}
-canvas{display:block;width:100%;height:auto;}
+.canvas-container{width:100%;aspect-ratio:920/520;position:relative;}
+canvas{width:100%;height:100%;display:block;}
 .bottom{display:flex;justify-content:center;gap:8px;padding:12px;flex-wrap:wrap;}
 .btn{flex:1 1 auto;padding:8px;border:none;border-radius:10px;font-size:14px;background:var(--btn);color:#fff;cursor:pointer;transition:0.18s;min-width:80px;max-width:120px;}
 .btn.muted{background:var(--muted);}
@@ -43,7 +44,9 @@ canvas{display:block;width:100%;height:auto;}
 
   <div class="canvas-wrap" id="canvasWrap">
     <div id="feverBadge" class="badge">FEVER MODE! 🔥</div>
-    <canvas id="game" aria-label="PongoBot fruit catcher"></canvas>
+    <div class="canvas-container">
+      <canvas id="game" aria-label="PongoBot fruit catcher"></canvas>
+    </div>
     <div id="tint" class="tint-overlay" aria-hidden="true"></div>
   </div>
 
@@ -59,10 +62,9 @@ canvas{display:block;width:100%;height:auto;}
 
 <script>
 (() => {
-  const NUM_PATHS = 6, CANVAS_BASE_HEIGHT = 520;
+  const NUM_PATHS = 6, BASE_WIDTH=920, BASE_HEIGHT=520;
   const MOVE_SPEED = 0.22, COMBO_THRESHOLD = 5, FEVER_THRESHOLD = 10;
   const COMBO_DURATION = 5000, FEVER_DURATION = 10000, DAYNIGHT_CYCLE_MS = 60000;
-  const BASE_WIDTH = 920; // original design
 
   let PLAYER_SIZE = 264, FRUIT_SIZE = 192;
 
@@ -101,20 +103,23 @@ canvas{display:block;width:100%;height:auto;}
 
   let DPR = window.devicePixelRatio || 1;
   let pathX=[], W=0, H=0;
-  function computePaths(){ W=canvas.width; H=canvas.height; pathX=[]; for(let i=0;i<NUM_PATHS;i++){ pathX.push(Math.round(W*(i+0.5)/NUM_PATHS)); } }
+  function computePaths(){ pathX=[]; for(let i=0;i<NUM_PATHS;i++){ pathX.push(Math.round(W*(i+0.5)/NUM_PATHS)); } }
 
   function resizeCanvas(){
     DPR = window.devicePixelRatio || 1;
-    canvas.width = canvas.clientWidth*DPR;
-    canvas.height = canvas.width*(CANVAS_BASE_HEIGHT/BASE_WIDTH)*DPR;
+    W = canvas.clientWidth * DPR;
+    H = canvas.clientHeight * DPR;
+    canvas.width = W;
+    canvas.height = H;
 
-    const scale = canvas.width / BASE_WIDTH;
+    const scale = W / BASE_WIDTH;
     PLAYER_SIZE = 264 * scale;
     FRUIT_SIZE = 192 * scale;
 
     computePaths();
     player.y = canvas.height - Math.round(PLAYER_SIZE/2) - Math.round(12*DPR);
-    player.x = pathX[player.path]; player.displayX = player.x;
+    player.x = pathX[player.path]; 
+    player.displayX = player.x;
     draw();
   }
   window.addEventListener('resize', ()=>{ resizeCanvas(); });
@@ -200,7 +205,10 @@ canvas{display:block;width:100%;height:auto;}
 
     player.displayX += (pathX[player.path]-player.displayX)*MOVE_SPEED;
 
-    updateTint();
+    const now=performance.now(); const t=((now%DAYNIGHT_CYCLE_MS)/DAYNIGHT_CYCLE_MS);
+    const val=Math.sin(t*Math.PI*2); const nightStrength=Math.max(0,(1-val)/2);
+    tintOverlay.style.background=`rgba(20,40,80,${0.18+0.22*nightStrength})`;
+
     draw();
 
     if(lives<=0){ playing=false; bgm.pause(); feverBadge.classList.remove('active'); messageEl.textContent=`Game Over! Score: ${score} 🍌`; startBtn.textContent='Restart'; return; }
@@ -213,7 +221,6 @@ canvas{display:block;width:100%;height:auto;}
     playing=true; fruits=[]; frames=0; score=0; lives=3; combo=0;
     comboActiveUntil=0; feverActiveUntil=0; spawnInterval=60;
     player.path=Math.floor(NUM_PATHS/2)-1;
-    if(!pathX[player.path]) computePaths();
     player.x=pathX[player.path]; player.displayX=player.x;
     player.y=canvas.height-Math.round(PLAYER_SIZE/2)-Math.round(12*DPR);
     startBtn.textContent='Playing...'; messageEl.textContent='Go! Help PongoBot catch fruits! 🍌';
@@ -233,14 +240,7 @@ canvas{display:block;width:100%;height:auto;}
     startBtn.textContent='Restart';
   });
 
-  function updateTint(){
-    const now=performance.now(); const t=((now%DAYNIGHT_CYCLE_MS)/DAYNIGHT_CYCLE_MS);
-    const val=Math.sin(t*Math.PI*2); const nightStrength=Math.max(0,(1-val)/2);
-    tintOverlay.style.background=`rgba(20,40,80,${0.18+0.22*nightStrength})`;
-  }
-
-  function init(){ resizeCanvas(); draw(); }
-  init();
+  resizeCanvas();
 })();
 </script>
 </body>
